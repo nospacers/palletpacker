@@ -60,3 +60,53 @@ def test_benchmark_fixtures_obey_core_rules_and_time_budget():
             "same_size_brick_mode",
             "fallback_greedy_mode",
         }
+
+
+def test_csv_upload_endpoint_runs_packer():
+    from io import BytesIO
+
+    import pytest
+
+    pytest.importorskip("flask")
+    from app import app
+
+    csv_text = "sku,quantity,height,length,depth,weight\nA,4,10,12,10,20\nB,6,6,8,6,3\n"
+    client = app.test_client()
+    response = client.post(
+        "/api/pack-csv",
+        data={
+            "file": (BytesIO(csv_text.encode("utf-8")), "shipment.csv"),
+            "pallet_length": "48",
+            "pallet_depth": "40",
+            "max_height": "72",
+            "max_overhang": "0",
+            "time_budget_seconds": "10",
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["diagnostics"]["boxes_placed"] == 10
+    assert payload["diagnostics"]["overflow_boxes"] == 0
+    assert payload["uploaded_items"][0]["sku"] == "A"
+
+
+def test_csv_upload_reports_missing_columns():
+    from io import BytesIO
+
+    import pytest
+
+    pytest.importorskip("flask")
+    from app import app
+
+    client = app.test_client()
+    response = client.post(
+        "/api/pack-csv",
+        data={"file": (BytesIO(b"sku,quantity\nA,1\n"), "bad.csv")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert "missing required columns" in payload["errors"][0]
