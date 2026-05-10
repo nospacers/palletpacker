@@ -196,12 +196,18 @@ def layer_capacity(length: float, depth: float, pallet_length: float, pallet_dep
     return max(0, floor((usable_l + EPS) / length) * floor((usable_d + EPS) / depth))
 
 
-def preflight(groups: Sequence[ItemGroup], pallet: PalletConfig) -> Tuple[Dict[str, Any], int, int]:
+def preflight(groups: Sequence[ItemGroup], pallet: PalletConfig) -> Tuple[Dict[str, Any], int, int, Dict[str, int]]:
     sku_info: Dict[str, Any] = {}
     pallet_volume = pallet.usable_length * pallet.usable_depth * pallet.max_height
     total_volume = sum(g.volume * g.quantity for g in groups)
     volume_estimate = max(1, ceil(total_volume / pallet_volume)) if groups else 0
-    geometry_lb = 0
+    # Use total shipment volume as the primary pallet estimate.  Per-SKU
+    # geometry is still calculated below, but a mixed shipment can share pallets
+    # across SKUs; summing each SKU's individual pallet minimum overstates the
+    # number of pallets and makes empty pallets too attractive for small boxes.
+    geometry_lb = volume_estimate
+    per_sku_geometry_sum = 0
+    max_sku_geometry_minimum = 0
     max_group_volume = max((g.volume for g in groups), default=1.0)
 
     for g in groups:
@@ -216,7 +222,8 @@ def preflight(groups: Sequence[ItemGroup], pallet: PalletConfig) -> Tuple[Dict[s
                 best_layer = max(best_layer, per_layer)
                 best_per_pallet = max(best_per_pallet, per_layer * layers)
         min_pallets = ceil(g.quantity / best_per_pallet) if best_per_pallet else g.quantity
-        geometry_lb += min_pallets
+        per_sku_geometry_sum += min_pallets
+        max_sku_geometry_minimum = max(max_sku_geometry_minimum, min_pallets)
         largest_side = max(g.length, g.depth, g.height)
         smallest_side = min(g.length, g.depth, g.height)
         area_ratio = (g.length * g.depth) / max(1.0, pallet.usable_length * pallet.usable_depth)
@@ -249,7 +256,14 @@ def preflight(groups: Sequence[ItemGroup], pallet: PalletConfig) -> Tuple[Dict[s
             "max_boxes_per_pallet": best_per_pallet,
             "minimum_pallets_required": min_pallets,
         }
-    return sku_info, max(volume_estimate, 0), max(geometry_lb, volume_estimate)
+    geometry_lb = max(volume_estimate, max_sku_geometry_minimum)
+    geometry_summary = {
+        "per_sku_geometry_pallet_sum": per_sku_geometry_sum,
+        "max_sku_geometry_minimum": max_sku_geometry_minimum,
+        "volume_only_pallet_estimate": volume_estimate,
+        "starting_pallet_estimate": geometry_lb,
+    }
+    return sku_info, max(volume_estimate, 0), max(geometry_lb, volume_estimate), geometry_summary
 
 
 def select_route(groups: Sequence[ItemGroup], sku_info: Dict[str, Any]) -> str:
@@ -413,7 +427,7 @@ def pack_shipment(items: Sequence[Dict[str, Any]], pallet_config: Optional[Dict[
     start = perf_counter()
     cfg = normalize_pallet_config(pallet_config)
     groups = normalize_groups(items)
-    sku_info, volume_estimate, geometry_lb = preflight(groups, cfg)
+    sku_info, volume_estimate, geometry_lb, geometry_summary = preflight(groups, cfg)
     route = select_route(groups, sku_info)
     boxes = expand_boxes(groups, sku_info, route)
     candidate_counter = {"tested": 0}
@@ -451,6 +465,7 @@ def pack_shipment(items: Sequence[Dict[str, Any]], pallet_config: Optional[Dict[
         "preflight_classification": sku_info,
         "geometry_lower_bound_pallet_estimate": geometry_lb,
         "volume_only_pallet_estimate": volume_estimate,
+        "geometry_estimate_details": geometry_summary,
         "candidate_count_tested": candidate_counter["tested"],
         "runtime_seconds": runtime,
         "boxes_placed": placed_count,

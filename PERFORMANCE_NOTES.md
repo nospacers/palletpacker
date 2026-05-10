@@ -11,6 +11,7 @@ The backend now performs a fast preflight pass before placing boxes.  Each SKU i
 
 ## Geometry lower bounds
 
+For every SKU, the preflight pass computes valid orientations, max boxes per pallet layer, max stack layers under the configured height limit, max boxes per pallet, and a minimum pallet count.  The packer now uses the total shipment volume divided by the user-configured pallet volume (`length × depth × max_height`) as the primary starting estimate, then raises that only when a single SKU's own geometry minimum is higher.  It keeps the summed per-SKU geometry count as diagnostics because summing SKU minimums overstates mixed shipments and makes empty pallets too attractive for small boxes.  If mixed geometry still needs more pallets, the packer adds pallets quickly when `allow_extra_pallets` is enabled.
 For every SKU, the preflight pass computes valid orientations, max boxes per pallet layer, max stack layers under the configured height limit, max boxes per pallet, and a minimum pallet count.  The packer starts with the maximum of this geometry lower bound and the volume-only estimate, preventing impossible volume-estimate layouts from causing long searches.  If mixed geometry still needs more pallets, the packer adds pallets quickly when `allow_extra_pallets` is enabled.
 
 ## Guardrails and caches

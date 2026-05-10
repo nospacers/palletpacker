@@ -110,3 +110,25 @@ def test_csv_upload_reports_missing_columns():
     payload = response.get_json()
     assert payload["success"] is False
     assert "missing required columns" in payload["errors"][0]
+
+
+def test_pallet_start_estimate_uses_total_volume_not_summed_per_sku_minimums():
+    from benchmark_packer import FIXTURE_A
+
+    result = pack_shipment(FIXTURE_A, PALLET, time_budget_seconds=TARGET_SECONDS)
+    diagnostics = result["diagnostics"]
+    details = diagnostics["geometry_estimate_details"]
+
+    pallet_volume = PALLET["length"] * PALLET["depth"] * PALLET["max_height"]
+    shipment_volume = sum(
+        item["quantity"] * item["height"] * item["length"] * item["depth"]
+        for item in FIXTURE_A
+    )
+    expected_volume_estimate = int(-(-shipment_volume // pallet_volume))
+
+    assert diagnostics["volume_only_pallet_estimate"] == expected_volume_estimate
+    assert details["starting_pallet_estimate"] == max(
+        expected_volume_estimate,
+        details["max_sku_geometry_minimum"],
+    )
+    assert details["per_sku_geometry_pallet_sum"] > details["starting_pallet_estimate"]
