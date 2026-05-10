@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pallet Packing Trainer</title>
+  <style>
+    :root { color-scheme: light; --bg:#f7f8fb; --card:#fff; --ink:#172033; --muted:#667085; --accent:#2563eb; --line:#d9e0ea; --good:#047857; --bad:#b42318; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
+    header { padding: 28px clamp(16px, 4vw, 48px); background: linear-gradient(135deg, #172033, #31456f); color: white; }
+    header h1 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 44px); }
+    header p { margin: 0; max-width: 920px; color: #d8e2ff; }
+    main { padding: 24px clamp(16px, 4vw, 48px) 48px; display: grid; gap: 20px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 10px 30px rgba(16,24,40,.06); padding: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+    label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 650; }
+    input, button { font: inherit; }
+    input[type="number"], input[type="file"] { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: white; color: var(--ink); }
+    button { border: 0; border-radius: 999px; background: var(--accent); color: white; padding: 12px 20px; font-weight: 750; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+    .hint, .status { color: var(--muted); font-size: 14px; }
+    .status[data-kind="error"] { color: var(--bad); font-weight: 700; }
+    .status[data-kind="ok"] { color: var(--good); font-weight: 700; }
+    pre { background: #101828; color: #d1e9ff; padding: 14px; border-radius: 12px; overflow: auto; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 10px 8px; }
+    th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+    .metric { border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    .metric strong { display:block; font-size: 24px; margin-top: 4px; }
+    .pallets { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .pallet-card h3 { margin: 0 0 8px; }
+    .footprint { position: relative; width: 100%; aspect-ratio: 48 / 40; border: 2px solid #344054; border-radius: 8px; background: repeating-linear-gradient(45deg, #f8fafc 0, #f8fafc 8px, #eef2f7 8px, #eef2f7 16px); overflow: hidden; }
+    .box { position: absolute; border: 1px solid rgba(16,24,40,.5); border-radius: 4px; color: #101828; display: grid; place-items: center; font-size: 10px; font-weight: 800; overflow: hidden; }
+    .sample { color: var(--accent); cursor: pointer; text-decoration: underline; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Pallet Packing Trainer</h1>
+    <p>Upload a shipment CSV, run the bounded Python packing engine, and review final pallets, diagnostics, overflow, and rule violations.</p>
+  </header>
+  <main>
+    <section class="card">
+      <h2>1. Upload shipment CSV</h2>
+      <p class="hint">Required columns: <code>sku,quantity,height,length,depth,weight</code>. Optional columns: <code>allow_rotate,allow_roll</code>. <span id="downloadSample" class="sample">Download sample CSV</span>.</p>
+      <form id="packForm">
+        <div class="grid">
+          <label>CSV file<input id="csvFile" name="file" type="file" accept=".csv,text/csv" required></label>
+          <label>Pallet length<input name="pallet_length" type="number" value="48" min="1" step="0.01"></label>
+          <label>Pallet depth<input name="pallet_depth" type="number" value="40" min="1" step="0.01"></label>
+          <label>Max height<input name="max_height" type="number" value="72" min="1" step="0.01"></label>
+          <label>Max overhang<input name="max_overhang" type="number" value="0" min="0" step="0.01"></label>
+          <label>Time budget seconds<input name="time_budget_seconds" type="number" value="10" min="0.1" max="60" step="0.1"></label>
+        </div>
+        <input type="hidden" name="allow_extra_pallets" value="true">
+        <div class="actions">
+          <button id="runButton" type="submit">Run packing benchmark</button>
+          <span id="status" class="status">Choose a CSV file to begin.</span>
+        </div>
+      </form>
+    </section>
+
+    <section id="results" class="card" hidden>
+      <h2>2. Packing result</h2>
+      <div id="summary" class="summary"></div>
+      <h3>Pallet footprints</h3>
+      <div id="pallets" class="pallets"></div>
+      <h3>Diagnostics</h3>
+      <pre id="diagnostics"></pre>
+      <h3>Overflow</h3>
+      <div id="overflow"></div>
+    </section>
+  </main>
+  <script src="/static/js/trainer.js"></script>
+</body>
+</html>
