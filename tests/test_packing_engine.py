@@ -132,3 +132,45 @@ def test_pallet_start_estimate_uses_total_volume_not_summed_per_sku_minimums():
         details["max_sku_geometry_minimum"],
     )
     assert details["per_sku_geometry_pallet_sum"] > details["starting_pallet_estimate"]
+
+
+def test_shipment_persistence_crud_endpoints(tmp_path):
+    import pytest
+
+    pytest.importorskip("flask")
+    from app import app
+
+    app.config["DATABASE"] = str(tmp_path / "shipments.db")
+    client = app.test_client()
+    result = pack_shipment([{"sku": "A", "quantity": 2, "height": 10, "length": 10, "depth": 10, "weight": 5}], PALLET)
+
+    create_response = client.post(
+        "/api/shipments",
+        json={
+            "name": "Persisted shipment",
+            "items": [{"sku": "A", "quantity": 2, "height": 10, "length": 10, "depth": 10, "weight": 5}],
+            "pallet": PALLET,
+            "result": result,
+        },
+    )
+    assert create_response.status_code == 201
+    shipment = create_response.get_json()["shipment"]
+    assert shipment["name"] == "Persisted shipment"
+
+    list_response = client.get("/api/shipments")
+    assert list_response.status_code == 200
+    assert list_response.get_json()["shipments"][0]["id"] == shipment["id"]
+
+    shipment["result"]["diagnostics"]["manual_edit"] = "moved in test"
+    update_response = client.put(
+        f"/api/shipments/{shipment['id']}",
+        json={"name": "Updated shipment", "result": shipment["result"]},
+    )
+    assert update_response.status_code == 200
+    updated = update_response.get_json()["shipment"]
+    assert updated["name"] == "Updated shipment"
+    assert updated["result"]["diagnostics"]["manual_edit"] == "moved in test"
+
+    delete_response = client.delete(f"/api/shipments/{shipment['id']}")
+    assert delete_response.status_code == 200
+    assert client.get(f"/api/shipments/{shipment['id']}").status_code == 404
